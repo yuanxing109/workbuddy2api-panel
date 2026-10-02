@@ -19,10 +19,14 @@
 @media (max-width: 760px) {
   /* ── 0. 明暗主题跟随面板设置（不再强制深色）────────────────────────
      手机端与桌面端共用同一套主题变量：顶栏主题按钮照常可用，选浅色就是浅色。
-     这里只补一条上游没做的：让原生控件（下拉/勾选/滚动条/日期选择器）跟着
-     面板选的主题走，而不是跟着系统的 prefers-color-scheme 走。 */
-  html[data-theme="dark"], html[data-theme="dark"] body { color-scheme: dark; }
-  html[data-theme="light"], html[data-theme="light"] body { color-scheme: light; }
+
+     这里两条必须写：手机浏览器（Chrome/国产内核）普遍带"自动暗化/强制深色"，
+     它会在 UA 层把浅色页面重新压暗——此时 getComputedStyle 报的是浅色背景，
+     实际像素却是黑的（主题按钮显示太阳、页面却还是深色，就是这个原因）。
+     color-scheme: only light 是标准的退出开关（only 关键字 = 页面只支持这一种），
+     同时让原生控件（下拉/勾选/滚动条/日期选择器）跟随面板主题而不是系统偏好。 */
+  html[data-theme="dark"], html[data-theme="dark"] body { color-scheme: only dark; }
+  html[data-theme="light"], html[data-theme="light"] body { color-scheme: only light; }
   /* 基础两行：视口高度链路 + 禁止手机浏览器自动放大字号（避免横向溢出） */
   html, body { height: 100%; -webkit-text-size-adjust: 100%; }
 
@@ -156,6 +160,21 @@
   .vtabs button { padding: 3px 9px; font-size: 12px; }
   .kpis { gap: 8px; padding: 10px 11px 0; }
   .kpi { padding: 8px 10px 9px 12px; border-radius: 10px; }
+
+  /* ── 用量「Token 时序」：窄屏在 mobile.js 里重画成 440×230 ────────────
+     上游那张固定 viewBox 1200×200、靠 width:100% 缩放的图，在 360px 宽下缩放比只有
+     ~0.28，内部 10px 刻度实际只剩 ~2.8px（看着就是一排小点）。这里只配套字号与配色，
+     几何在 mobile.js 的 drawMobileUsageChart 里算。 */
+  .uschart-hd { flex-wrap: wrap; gap: 4px 8px; padding: 8px 10px; }
+  .uschart-hd .lb { flex: 1 1 auto; }
+  .uschart-hd .grow { display: none; }
+  .uschart-hd .legend { flex: 0 0 auto; }
+  .uschart-hd .note { flex: 1 1 100%; order: 3; font-size: 11px; line-height: 1.35; }
+  .uschart-body { padding: 6px 8px 2px; }
+  .uschart-body .tk, .uschart-body .tk-avg { font-size: 13px; }
+  .uschart-body .tk-peak { font-size: 13.5px; }
+  .uschart-body .usbar-p { fill: var(--accent); }
+  .uschart-body .usbar-c { fill: var(--ok); }
 
   /* 任务弹窗卡：任务+状态 / 进度·奖励 / 按钮 */
   #taskBody tr > .who { grid-column: 1 / 9; }
