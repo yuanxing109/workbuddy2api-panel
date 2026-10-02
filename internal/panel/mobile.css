@@ -17,18 +17,12 @@
    故不影响任何现存样式。 */
 .nav-btn, .nav-veil { display: none; }
 @media (max-width: 760px) {
-  /* ── 0. 手机端固定深色运维台 ───────────────────────────────────────
-     手机一律深色（参考图口径：近黑页面底 + 更深一档的卡片底 + 蓝主按钮），
-     浅色主题只在 >760px 生效；故顶栏主题按钮在手机上隐藏（避免点了没反应的死控件）。
-     html[data-theme] 比上游的 [data-theme="light"] 多一个元素选择器，稳定覆盖。 */
-  html, html[data-theme] {
-    color-scheme: dark;
-    --bg: #07090d; --surface: #0e1016; --surface-2: #171c25; --raise: #1b212b;
-    --line: #232a37; --line-soft: #1a1f29;
-    --ink: #e9ecf3; --ink-2: #98a1b2; --ink-3: #6b7384;
-    --accent: #4f6fe8; --accent-soft: rgba(79,111,232,.16);
-    --shadow: none;
-  }
+  /* ── 0. 明暗主题跟随面板设置（不再强制深色）────────────────────────
+     手机端与桌面端共用同一套主题变量：顶栏主题按钮照常可用，选浅色就是浅色。
+     这里只补一条上游没做的：让原生控件（下拉/勾选/滚动条/日期选择器）跟着
+     面板选的主题走，而不是跟着系统的 prefers-color-scheme 走。 */
+  html[data-theme="dark"], html[data-theme="dark"] body { color-scheme: dark; }
+  html[data-theme="light"], html[data-theme="light"] body { color-scheme: light; }
   /* 基础两行：视口高度链路 + 禁止手机浏览器自动放大字号（避免横向溢出） */
   html, body { height: 100%; -webkit-text-size-adjust: 100%; }
 
@@ -54,10 +48,10 @@
   }
   .nav-veil.on { opacity: 1; pointer-events: auto; }
 
-  /* ── 2. 顶栏：一行放下，隐藏分隔符/副标题/主题按钮 ─────────────── */
+  /* ── 2. 顶栏：紧凑换行，只隐藏分隔符与副标题（主题按钮保留可用）────── */
   .topbar { flex-wrap: wrap; gap: 6px 8px; padding: 8px 10px; }
   .topbar h2 { font-size: 15px; }
-  .topbar .sep, .topbar .meta, .topbar #btnTheme { display: none; }
+  .topbar .sep, .topbar .meta { display: none; }
   .topbar button { padding: 5px 9px; font-size: 12.5px; border-radius: 8px; }
   .topbar button.icon { padding: 5px 8px; }
   .topbar #btnAdd { padding: 5px 12px; }
