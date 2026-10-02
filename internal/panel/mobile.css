@@ -145,10 +145,24 @@
   .acc.zebra tr > td { grid-column: span 4; }
   .acc.zebra tbody tr, .acc.zebra tbody tr:nth-child(even) { background: var(--surface); }
   .acc.req { min-width: 0; }
-  .acc.req tr > td:first-child { grid-column: 1 / -1; }
-  .acc.req tr > td { grid-column: span 3; }
+  .acc.req tr > td { grid-column: span 3; }   /* 兜底：上游将来加列也不至于错位 */
   .acc.req .clip, .acc.req .clip.ip, .acc.req .clip.rid { max-width: none; white-space: normal; overflow-wrap: anywhere; }
-  .req-wrap { max-height: 70vh; }
+  /* 请求记录（10 列，列序在 index.html 里固定）：把长字段摊开，别挤成一条竖排碎字。
+     时间+结果 / 模型 / 账号+来源 / UA（整行，实测一列只有 74px 宽会折成 12 行）/ 三个指标 / 请求 ID */
+  #reqBody tr > td:nth-child(1) { grid-column: 1 / 9; }
+  #reqBody tr > td:nth-child(2) { grid-column: 9 / 13; justify-content: flex-end; }
+  #reqBody tr > td:nth-child(3) { grid-column: 1 / 13; }
+  #reqBody tr > td:nth-child(4) { grid-column: 1 / 8; }
+  #reqBody tr > td:nth-child(5) { grid-column: 8 / 13; justify-content: flex-end; }
+  #reqBody tr > td:nth-child(6) { grid-column: 1 / 13; }
+  #reqBody tr > td:nth-child(7),
+  #reqBody tr > td:nth-child(8),
+  #reqBody tr > td:nth-child(9) { grid-column: span 4; }
+  #reqBody tr > td:nth-child(10) { grid-column: 1 / 13; }
+  /* 卡片模式给外层 .tbl-wrap 关了滚动（见上面第 3 节），但请求记录必须是「一屏高 +
+     内部纵向滚动」：上游 .req-wrap 就是这个语义，overflow 被覆盖后卡片会溢出去压住
+     下面的运行日志（实测卡片 bottom 1897 vs box bottom 904）。 */
+  .req-wrap { max-height: 70vh; overflow: auto; -webkit-overflow-scrolling: touch; }
 
   /* 上游新增的筛选栏 / 时间范围 / 维度切换 / KPI 卡：同密度口径收紧 */
   .fbar { padding: 8px 10px; gap: 6px; }
