@@ -7,8 +7,7 @@
  */
 
 /* ── 移动端适配（≤760px）──────────────────────────────────────────────
-   分工：所有手机端**样式**都在 index.html 末尾那一条 @media (max-width:760px)；
-   这里只做 CSS 表达不了的联动：
+   分工：所有手机端**样式**都在 mobile.css；这里只做 CSS 表达不了的联动：
 
    1) 侧栏抽屉开合（汉堡 / 遮罩 / 导航项 / ESC / 转回宽屏复位）。
       「转回宽屏复位」不是可选项：遮罩是 fixed 全屏层，窗口拉宽后若不摘掉 .on，
@@ -100,3 +99,114 @@ function queueLabels() {
 }
 labelTables(); // 首屏：把已存在的行先标好
 new MutationObserver(queueLabels).observe(document.body, { childList: true, subtree: true });
+
+/* ── 用量「Token 时序」：窄屏另画一张 ─────────────────────────────────
+   上游那张图是固定 viewBox 1200×200 的 SVG，靠 width:100% 整体缩放：360px 宽的手机上
+   缩放比只有 ~0.28，内部 10px 刻度实际只剩 ~2.8px（看着就是一排小点），柱宽也只剩 5px。
+   窄屏改用 440×230 的 viewBox（缩放 ~0.77）并抽稀刻度，字号/柱宽按 CSS 像素算，
+   不需要横向拖动。>760px 仍走上游实现，桌面端不受影响。
+   实现放在本文件而不是改 app.js：上游常改前端，独立文件才不会每次同步都冲突。 */
+const deskUsageChart = renderUsageChart;
+
+function mobileUsageChart(series) {
+  if (!MOBILE_MQ.matches) { deskUsageChart(series); return; }
+  try {
+    drawMobileUsageChart(series);
+  } catch (e) {
+    deskUsageChart(series); // 自绘出错不能让整页用量视图空掉
+  }
+}
+
+function drawMobileUsageChart(series) {
+  const host = $('usChart');
+  if (!host) return;
+  const pts = [];
+  for (const p of series || []) {
+    const t = parsePointTime(p);
+    if (t === null) continue;
+    const pt = Number(p.prompt_tokens || 0), ct = Number(p.completion_tokens || 0);
+    pts.push({ t: t, raw: p.t, scope: p.scope, pt: pt, ct: ct,
+               tt: Number(p.total_tokens || 0) || (pt + ct), req: p.requests || 0 });
+  }
+  if (!pts.length) {
+    host.innerHTML = '<div class="us-empty">暂无用量数据。发起一次对话后再刷新。</div>';
+    $('usChartNote').textContent = '—';
+    return;
+  }
+  const W = 440, H = 230, PL = 56, PR = 12, PT = 18, PB = 30;
+  const iw = W - PL - PR, ih = H - PT - PB, yBase = PT + ih;
+  const t0 = pts[0].t, span = Math.max(1, pts[pts.length - 1].t - t0);
+  const max = Math.max(1, ...pts.map(p => p.tt));
+  const peak = pts.reduce((a, b) => (b.tt > a.tt ? b : a), pts[0]);
+  const avg = pts.reduce((s, p) => s + p.tt, 0) / pts.length;
+  $('usChartNote').textContent = pts.length + ' 个点 · 峰值 ' + fmtTok(peak.tt) + ' @ ' +
+    fmtTokTimeLabel(peak) + ' · 均值 ' + fmtTok(avg);
+
+  let minGap = Infinity;
+  for (let i = 1; i < pts.length; i++) minGap = Math.min(minGap, pts[i].t - pts[i - 1].t);
+  if (!isFinite(minGap) || minGap <= 0) minGap = span;
+  const bw = Math.max(3, Math.min(22, iw * (minGap / span) * 0.7));
+  const xOf = t => PL + bw / 2 + (t - t0) / span * Math.max(1, iw - bw);
+  const yOf = v => PT + ih - ih * (v / max);
+
+  let out = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" preserveAspectRatio="xMidYMid meet">';
+  // 只画 4 条网格：窄屏塞 5 条时刻度文字比柱子还挤
+  for (let i = 0; i <= 3; i++) {
+    const y = PT + ih - (ih * i / 3);
+    out += '<line class="gl" x1="' + PL + '" y1="' + y.toFixed(1) + '" x2="' + (W - PR) + '" y2="' + y.toFixed(1) + '"/>' +
+      '<text class="tk" x="' + (PL - 6) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="end">' + fmtTok(max * i / 3) + '</text>';
+  }
+  if (avg > 0 && avg < max) {
+    const y = yOf(avg);
+    out += '<line class="avg" x1="' + PL + '" y1="' + y.toFixed(1) + '" x2="' + (W - PR) + '" y2="' + y.toFixed(1) + '"/>' +
+      '<text class="tk-avg" x="' + (PL + 4) + '" y="' + (y - 5).toFixed(1) + '" text-anchor="start">均值 ' + fmtTok(avg) + '</text>';
+  }
+  for (const p of pts) {
+    const x = xOf(p.t) - bw / 2;
+    const hTot = ih * (p.tt / max);
+    const hP = p.tt ? hTot * (p.pt / p.tt) : 0;
+    const hC = Math.max(p.tt && p.ct ? 1 : 0, hTot - hP);
+    if (hP > 0) out += '<rect class="usbar usbar-p" x="' + x.toFixed(2) + '" y="' + (yBase - hP).toFixed(2) +
+      '" width="' + bw.toFixed(2) + '" height="' + hP.toFixed(2) + '"' + (hC > 0 ? '' : ' rx="1.5"') + '/>';
+    if (hC > 0) out += '<rect class="usbar usbar-c" x="' + x.toFixed(2) + '" y="' + (yBase - hP - hC).toFixed(2) +
+      '" width="' + bw.toFixed(2) + '" height="' + hC.toFixed(2) + '" rx="1.5"/>';
+    out += '<title>' + esc(p.raw) + '  ' + fmtTok(p.pt) + ' prompt / ' + fmtTok(p.ct) + ' completion / ' + p.req + ' 次</title>';
+  }
+  {
+    const px = xOf(peak.t), py = yOf(peak.tt);
+    const anchor = px > W - PR - 84 ? 'end' : 'middle';
+    out += '<text class="tk-peak" x="' + Math.max(PL, Math.min(W - PR, px)).toFixed(1) + '" y="' +
+      Math.max(12, py - 6).toFixed(1) + '" text-anchor="' + anchor + '">峰值 ' + fmtTok(peak.tt) + '</text>';
+  }
+  out += '<line class="ax" x1="' + PL + '" y1="' + yBase + '" x2="' + (W - PR) + '" y2="' + yBase + '"/>';
+  // x 刻度抽到 4 个（上游 6 个），且取"离目标最近的真实柱子"，标签永远落在有数据的点上
+  const TICKS = Math.min(4, pts.length);
+  const used = new Set();
+  for (let k = 0; k < TICKS; k++) {
+    const target = t0 + span * (TICKS === 1 ? 0.5 : k / (TICKS - 1));
+    let bi = 0, best = Infinity;
+    for (let i = 0; i < pts.length; i++) {
+      const d = Math.abs(pts[i].t - target);
+      if (d < best) { best = d; bi = i; }
+    }
+    if (used.has(bi)) continue;
+    used.add(bi);
+    const p = pts[bi], cx = xOf(p.t);
+    const anchor = cx < PL + 16 ? 'start' : (cx > W - PR - 16 ? 'end' : 'middle');
+    out += '<text class="tk" x="' + Math.max(PL, Math.min(W - PR, cx)).toFixed(1) + '" y="' + (yBase + 15).toFixed(1) +
+      '" text-anchor="' + anchor + '">' + esc(fmtTokTimeLabel(p)) + '</text>';
+  }
+  let prevDay = null; // 跨天分隔线：长窗口里能看出日界
+  for (const p of pts) {
+    const d = new Date(p.t).getDate();
+    if (prevDay !== null && d !== prevDay) {
+      const x = xOf(p.t).toFixed(1);
+      out += '<line class="gl" x1="' + x + '" y1="' + PT + '" x2="' + x + '" y2="' + yBase + '" style="opacity:.45"/>';
+    }
+    prevDay = d;
+  }
+  out += '</svg>';
+  host.innerHTML = out;
+}
+
+renderUsageChart = mobileUsageChart;
