@@ -13,9 +13,9 @@ import (
 	"time"
 )
 
-// TestAppJSSyntax app.js 必须能通过 JS 解析器语法校验。
+// TestAppJSSyntax app.js / mobile.js 必须能通过 JS 解析器语法校验。
 //
-// 为什么需要：app.js 是 go:embed 进二进制的静态资源，Go 编译器不检查其内容——
+// 为什么需要：两者都是 go:embed 进二进制的静态资源，Go 编译器不检查其内容——
 // 一次对象字面量键名未加引号（Model_chat_GLM5.2 被解析成属性访问 + 数字字面量）
 // 就让整个面板白屏，而所有 Go 测试依然全绿。此测试把语法校验前移到 CI。
 // 无 node 环境时跳过（不阻塞无 Node 的构建机）。
@@ -24,13 +24,15 @@ func TestAppJSSyntax(t *testing.T) {
 	if err != nil {
 		t.Skip("node not available; skipping JS syntax check")
 	}
-	path, err := filepath.Abs("app.js")
-	if err != nil {
-		t.Fatal(err)
-	}
-	out, err := exec.Command(node, "--check", path).CombinedOutput()
-	if err != nil {
-		t.Fatalf("app.js syntax error:\n%s", out)
+	for _, name := range []string{"app.js", "mobile.js"} {
+		path, err := filepath.Abs(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, err := exec.Command(node, "--check", path).CombinedOutput()
+		if err != nil {
+			t.Fatalf("%s syntax error:\n%s", name, out)
+		}
 	}
 }
 
@@ -91,6 +93,9 @@ const sandbox = new Proxy({
   fetch: () => new Promise(() => {}),
   addEventListener() {}, removeEventListener() {},
   matchMedia: () => ({ matches: false, addEventListener() {} }),
+  // mobile.js 顶层直接 new MutationObserver(...)（移动端表格字段名补标签）：
+  // 该文件不在本沙箱内执行，但保留此桩，将来把 mobile.js 纳入冒烟时可直接复用。
+  MutationObserver: class { constructor() {} observe() {} disconnect() {} takeRecords() { return []; } },
   setInterval, clearInterval, setTimeout, clearTimeout,
   console, JSON, Math, Date, Number, String, Boolean, Object, Array, Promise, Map, Set, RegExp, Error, TypeError, isNaN, parseInt, parseFloat, encodeURIComponent, decodeURIComponent, URL, Symbol, Proxy, Reflect,
 }, { get(t, k) { return t[k]; }, has() { return true; } });
