@@ -99,6 +99,10 @@
   .acc.md .mark { display: none; }
   /* 跨列单元格（空态提示、包分组汇总）整行铺满 */
   .acc td[colspan] { grid-column: 1 / -1; }
+  /* 兜底列宽：没被下面逐表映射覆盖的单元格默认 3 格/行。上游加新表时（v1.12.0 的
+     「模型锁池」就是一例）宁可三格一行，也不会因为"没有 grid-column"退化成一列碎字。
+     逐表映射都带 id 或额外类限定符，特异性更高，不受这条兜底影响。 */
+  .acc tr > td { grid-column: span 4; }
   .acc .who { display: block; min-width: 0; max-width: none; }
   .acc .who .nm { font-size: 13.5px; line-height: 1.25; }
   .acc .who .id { font-size: 10px; line-height: 1.3; margin-top: 1px; }
@@ -125,6 +129,14 @@
   #accBody tr > td:nth-child(8) { grid-column: 1 / 4; order: 1; }
   #accBody tr > .usage-cell { grid-column: 4 / 13; order: 2; }
   #accBody tr > .acts { order: 3; }
+
+  /* 模型锁池（v1.12.0 新增，8 列）：模型 / 域 / 状态 / 可选·总数 / 锁定账号 / 最早解锁 / 全池解锁 / 原因 */
+  #mlBody tr > td:nth-child(1) { grid-column: 1 / 9; }
+  #mlBody tr > td:nth-child(2) { grid-column: 9 / 13; justify-content: flex-end; }
+  #mlBody tr > td:nth-child(3) { grid-column: 1 / 7; }
+  #mlBody tr > td:nth-child(4), #mlBody tr > td:nth-child(5) { grid-column: span 3; }
+  #mlBody tr > td:nth-child(6), #mlBody tr > td:nth-child(7) { grid-column: span 6; }
+  #mlBody tr > td:nth-child(8) { grid-column: 1 / 13; }
 
   /* 模型卡：① 模型 ID + 名称 + 能力标签 ② 倍率/默认档/上下文/输出 ③ 支持档位 */
   #mdBody tr > .who { grid-column: 1 / 13; display: flex; flex-wrap: wrap; gap: 0 6px; }
@@ -248,6 +260,10 @@
   .box { border-radius: 12px; margin-bottom: 12px; }
   .box > header { flex-wrap: wrap; gap: 6px 8px; padding: 9px 11px; }
   .box > header h3 { font-size: 12.5px; white-space: normal; }
+  /* 上游 .box > header .note 也是 nowrap（L200）：v1.12.0 起 packages 页每个账号盒头部的
+     余额口径文字变长，窄屏直接撑破整页（实测 563px）。用量页那条 id 限定的「单行截断」
+     规则特异性更高，仍按上游保持省略号，不受这里影响。 */
+  .box > header .note { white-space: normal; }
   .box .pad { padding: 11px; }
   .grid2, .grid3 { grid-template-columns: minmax(0, 1fr); }
   /* 任务中心：每项也是一张卡（标题+状态 / 进度+编码 / 信息） */
@@ -272,6 +288,13 @@
   .qprog { padding: 8px 11px 0; }
   .pk-expiry-hdr, .pk-expiry-row { grid-template-columns: 52px minmax(60px, 1fr) 62px; gap: 6px; }
   .pk-expiry-chart { padding-right: 4px; }
+
+  /* ── 上游 v1.12.0 新增：首页「积分到期提醒」卡片（.exp-row）──────────
+     桌面端是 [色点][账号名 min-width:9em][正文] 的单行布局；窄屏上 9em 硬下限会把
+     正文挤成一条，故让名字可收缩、正文整行换行。 */
+  .exp-row { flex-wrap: wrap; gap: 4px 8px; padding: 7px 0; }
+  .exp-nm { min-width: 0; flex: 0 1 auto; overflow-wrap: anywhere; }
+  .exp-main { flex: 1 1 100%; min-width: 0; overflow-wrap: anywhere; }
 
   /* ── 6. 长不可断字符串兜底 ────────────────────────────────────────
      长昵称 / 长模型名 / 长券码这类"没有一个断点"的串会撑破 flex 行：flex 子项默认

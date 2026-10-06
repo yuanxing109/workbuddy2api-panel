@@ -90,14 +90,28 @@ function labelTable(table) {
 function labelTables() {
   document.querySelectorAll('table').forEach(labelTable);
 }
+/* 账号卡底部的操作按钮要在一行里平分宽度（设计要求：全部按钮单行）。上游按钮文案会变长
+   （v1.12.0 起多了「暂停选号」）：320px 下 6 个按钮一行每个只有 ~40px，4 个字放不下、
+   文字被硬裁。这里把超过 3 个字的文案压到 2 个字，完整文案挂到 title，保持单行不裁字。 */
+const ACT_SHORT = { '暂停选号': '暂停', '恢复选号': '恢复' };
+function shortenActLabels() {
+  if (!MOBILE_MQ.matches) return;
+  for (const b of document.querySelectorAll('.acc .acts button')) {
+    const t = (b.textContent || '').trim();
+    if (t.length <= 3) continue;
+    if (!b.title) b.title = t;
+    b.textContent = ACT_SHORT[t] || t.slice(0, 2);
+  }
+}
 /* 一次重渲染会连发多条 mutation（整段 tbody 换掉），合并成一次批处理。 */
 let labelPending = false;
 function queueLabels() {
   if (labelPending) return;
   labelPending = true;
-  setTimeout(() => { labelPending = false; labelTables(); }, 0);
+  setTimeout(() => { labelPending = false; labelTables(); shortenActLabels(); }, 0);
 }
 labelTables(); // 首屏：把已存在的行先标好
+shortenActLabels();
 new MutationObserver(queueLabels).observe(document.body, { childList: true, subtree: true });
 
 /* ── 用量「Token 时序」：窄屏另画一张 ─────────────────────────────────
