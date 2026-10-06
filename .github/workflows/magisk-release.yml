@@ -1,0 +1,181 @@
+name: magisk-release
+
+# 本文件是本仓库自有补丁（上游没有它），只为 Magisk 模块的自动更新服务：
+#   push main → 编 linux/arm64（模块用）+ amd64 / windows（顺手产出）
+#             → 发布成滚动 Release（tag wb2api-latest，资产名恒定）
+#             → 同时生成 latest.txt / latest.json 清单
+#
+# 为什么不用上游的 go-binaries.yml：那条流程要打 tag（且 tag 必须等于源码 appVersion），
+# 每推一次适配就多一道手工工序，同一个版本还只能有一个 tag。这里改为 push 即发布。
+#
+# 为什么清单是 txt + json 两份：txt 是 key=value，模块里的 sh 用 sed 直接读（不需要 json 解析器）；
+# json 给人看、也给别的工具用。两份内容同源，不会漂。
+#
+# 资产名故意不带版本号（wb2api-linux-arm64）：URL 恒定，模块侧不必先知道版本号就能取清单。
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: magisk-release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test ./...
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: linux, goarch: arm64, asset: wb2api-linux-arm64 }
+          - { goos: linux, goarch: amd64, asset: wb2api-linux-amd64 }
+          - { goos: windows, goarch: amd64, asset: wb2api-windows-amd64.exe }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: 取源码版本号
+        id: ver
+        run: echo "v=$(grep -oP 'appVersion = \"\K[^\"]+' cmd/server/main.go)" >> "$GITHUB_OUTPUT"
+
+      - name: 构建（剥离符号，对齐本地发布口径）
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: go build -trimpath -ldflags "-s -w" -o "${{ matrix.asset }}" ./cmd/server
+
+      # 版本串断言：上游 CI 也这么做。编错树 / 漏 ldflags / GOOS 没生效都不会报错，
+      # 只会安静产出一个版本串不对的包，模块下下去就是回退版本。
+      - name: 断言二进制版本串
+        run: |
+          A="${{ matrix.asset }}"
+          V="${{ steps.ver.outputs.v }}"
+          if ! grep -qa "$V" "$A"; then
+            echo "::error::$A 里找不到版本串 $V"
+            exit 1
+          fi
+          # 移动端适配必须在这个二进制里：缺了说明摘自上游树或漏了自有文件
+          for s in "color-scheme" "dns_servers"; do
+            grep -qa "$s" "$A" || { echo "::error::$A 缺少适配标志串 $s"; exit 1; }
+          done
+          echo "版本串与适配标志都在：$V"
+
+      - name: 生成校验和
+        run: sha256sum "${{ matrix.asset }}" > "${{ matrix.asset }}.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: |
+            ${{ matrix.asset }}
+            ${{ matrix.asset }}.sha256
+          retention-days: 14
+
+  release:
+    needs: build
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: 生成 latest.txt / latest.json / checksums
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          set -e
+          VER=$(grep -oP 'appVersion = "\K[^"]+' cmd/server/main.go)
+          python3 - "$VER" <<'PY'
+          import hashlib, json, os, pathlib, sys, datetime
+
+          ver = sys.argv[1]
+          repo = os.environ["REPO"]
+          assets = [
+              ("linux-arm64", "wb2api-linux-arm64"),
+              ("linux-amd64", "wb2api-linux-amd64"),
+              ("windows-amd64", "wb2api-windows-amd64.exe"),
+          ]
+          # 版本折算成数字，和模块 sh 里的 a*10000+b*100+c 保持一致（只用于人看）
+          core = ver.split("-")[0].split(".")
+          code = int(core[0]) * 10000 + int(core[1]) * 100 + (int(core[2]) if len(core) > 2 else 0)
+
+          out = pathlib.Path("dist")
+          rows, jrows = [], []
+          for key, name in assets:
+              p = out / name
+              if not p.exists():
+                  continue
+              data = p.read_bytes()
+              sha = hashlib.sha256(data).hexdigest()
+              rows.append(f"asset_{key.replace('-', '_')}={name}")
+              rows.append(f"sha256_{key.replace('-', '_')}={sha}")
+              rows.append(f"size_{key.replace('-', '_')}={len(data)}")
+              jrows.append({
+                  "os": key.split("-")[0], "arch": key.split("-")[1],
+                  "name": name, "size": len(data), "sha256": sha,
+                  "url": f"https://github.com/{repo}/releases/download/wb2api-latest/{name}",
+              })
+
+          base = [
+              "# wb2api 自动更新清单：模块里的 updater.sh 用 sed 读，格式别改（key=value）。",
+              f"version={ver}",
+              f"versioncode={code}",
+              f"commit={os.environ.get('GITHUB_SHA', '')[:12]}",
+              f"run={os.environ.get('GITHUB_RUN_NUMBER', '')}",
+              f"published={datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}",
+          ]
+          (out / "latest.txt").write_text("\n".join(base + rows) + "\n", encoding="utf-8")
+
+          (out / "latest.json").write_text(json.dumps({
+              "schema": 1, "version": ver, "versionCode": code,
+              "commit": os.environ.get("GITHUB_SHA", ""),
+              "publishedAt": base[-1].split("=", 1)[1],
+              "assets": jrows,
+          }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          print((out / "latest.txt").read_text(encoding="utf-8"))
+          PY
+          cd dist && sha256sum wb2api-* > checksums.txt && cat checksums.txt
+
+      - name: 发布滚动 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: wb2api-latest
+          name: wb2api 自动构建（滚动）
+          make_latest: true
+          overwrite_files: true
+          body: |
+            CI 自动构建的 wb2api 二进制（含本仓库的移动端适配与 DNS 适配）。
+
+            资产名固定不变，Magisk 模块的 `updater.sh` 就是按这些名字取文件的：
+
+            | 平台 | 文件 |
+            | --- | --- |
+            | Android / Linux arm64 | `wb2api-linux-arm64` |
+            | Linux amd64 | `wb2api-linux-amd64` |
+            | Windows amd64 | `wb2api-windows-amd64.exe` |
+
+            清单：`latest.txt`（key=value，给 sh 读）/ `latest.json`（给工具读）
+            校验：`checksums.txt`
+
+            提交：${{ github.sha }}
+          files: dist/*
