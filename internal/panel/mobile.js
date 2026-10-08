@@ -180,11 +180,14 @@ function drawMobileUsageChart(series) {
     const hTot = ih * (p.tt / max);
     const hP = p.tt ? hTot * (p.pt / p.tt) : 0;
     const hC = Math.max(p.tt && p.ct ? 1 : 0, hTot - hP);
+    // 每根柱子包一个 <g>：SVG 里 <title> 描述的是父元素，平铺在根下会全图共用一个
+    // tooltip（悬停任何柱子都是同一份数据，issue #128）。
+    out += '<g><title>' + esc(p.raw) + '  ' + fmtTok(p.pt) + ' prompt / ' + fmtTok(p.ct) + ' completion / ' + p.req + ' 次</title>';
     if (hP > 0) out += '<rect class="usbar usbar-p" x="' + x.toFixed(2) + '" y="' + (yBase - hP).toFixed(2) +
       '" width="' + bw.toFixed(2) + '" height="' + hP.toFixed(2) + '"' + (hC > 0 ? '' : ' rx="1.5"') + '/>';
     if (hC > 0) out += '<rect class="usbar usbar-c" x="' + x.toFixed(2) + '" y="' + (yBase - hP - hC).toFixed(2) +
       '" width="' + bw.toFixed(2) + '" height="' + hC.toFixed(2) + '" rx="1.5"/>';
-    out += '<title>' + esc(p.raw) + '  ' + fmtTok(p.pt) + ' prompt / ' + fmtTok(p.ct) + ' completion / ' + p.req + ' 次</title>';
+    out += '</g>';
   }
   {
     const px = xOf(peak.t), py = yOf(peak.tt);
