@@ -1,20 +1,8 @@
 name: magisk-release
 
-# 本文件是本仓库自有补丁（上游没有它），只为 Magisk 模块的自动更新服务：
-#   push main → 编 linux/arm64（模块用）+ amd64 / windows（顺手产出）
-#             → 发布 Release（tag = 源码 appVersion 去掉 -panel，如 v1.12.0）
-#             → 同时生成 latest.txt / latest.json 清单
-#
-# 为什么不用上游的 go-binaries.yml：那条流程要手工打 tag（同一个版本只能有一个 tag，
-# 改了适配重推就没法再发），这里改成 push 即发布；tag 仍然取版本号，发行版列表里一眼
-# 能看出是哪个版本。
-#
-# 为什么清单是 txt + json 两份：txt 是 key=value，模块里的 sh 用 sed 直接读（不需要 json
-# 解析器）；json 给人看、也给别的工具用。两份内容同源，不会漂。
-#
-# 为什么资产名不带版本号：模块侧固定取 releases/latest/download/<名字>，名字里带版本
-# 就得先知道版本才能拼 URL（那就得走 API，而 API 匿名额度 60/小时、出口共享 IP 会被打满）。
-# 版本号在 tag 上、也在清单的 version= 里。
+# 自有补丁（上游没有这个文件）：push main 即编译并发布 Release，给 Magisk 模块的自动更新取用。
+#   tag = 源码 appVersion 去掉 -panel（如 v1.12.0）；资产名不带版本号，清单是 latest.txt / latest.json；
+#   模块取的地址是 releases/latest/download/latest.txt（恒定，指向最新一版）。
 on:
   push:
     branches: [main]
