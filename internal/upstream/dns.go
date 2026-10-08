@@ -12,12 +12,8 @@ import (
 const dnsDialTimeout = 5 * time.Second
 
 // NewDNSDialer 构造使用指定 DNS 服务器的出站拨号器（空 = 系统解析器）。
-// Android 没有 /etc/resolv.conf，Go 的纯 Go 解析器会退回 127.0.0.1/::1，
-// 于是查任何域名都变成"连本机 53 端口"，报错形如：
-//
-//	dial tcp: lookup copilot.tencent.com on [::1]:53: read udp [::1]:34337->[::1]:53: connection refused
-//
-// 传入真实 DNS（如 223.5.5.5 / 119.29.29.29）即绕开系统解析器。
+// Android 没有 /etc/resolv.conf：Go 解析器会退回 [::1]:53 导致所有域名解析失败，
+// 传真实 DNS（223.5.5.5 / 119.29.29.29）即绕开。
 func NewDNSDialer(servers []string) *net.Dialer {
 	d := newDialer()
 	if len(servers) > 0 {
@@ -44,8 +40,7 @@ func NewDNSDialer(servers []string) *net.Dialer {
 	return d
 }
 
-// SetDNSDialer 把拨号器换到已有的两个 http.Client 上：只覆盖 Transport.DialContext，
-// 不碰超时/连接池等既有参数——所以不用改 transport.go。
+// SetDNSDialer 把拨号器换到已有的两个 http.Client 上（只覆盖 Transport.DialContext）。
 func (c *Client) SetDNSDialer(d *net.Dialer) {
 	if d == nil {
 		return
